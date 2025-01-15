@@ -10,11 +10,14 @@ const outputHtml = path.join(projectDist, 'index.html');
 const outputCss = path.join(projectDist, 'style.css');
 const outputAssets = path.join(projectDist, 'assets');
 
+const mergeStyles = require('../05-merge-styles/index.js');
+const copyDir = require('../04-copy-directory/index.js');
+
 function buildPage() {
   fs.mkdir(projectDist, { recursive: true }, () => {
     buildHtml();
-    buildStyles();
-    copyAssets(assetsDir, outputAssets);
+    mergeStyles(stylesDir, projectDist, outputCss);
+    copyDir(assetsDir, outputAssets);
   });
 }
 
@@ -52,52 +55,6 @@ function buildHtml() {
         if (completedReplacements === tags.length) {
           fs.writeFile(outputHtml, content, (err) => {
             if (err) console.log('Error writing index.html:', err);
-          });
-        }
-      });
-    });
-  });
-}
-
-function buildStyles() {
-  fs.readdir(stylesDir, { withFileTypes: true }, (err, files) => {
-    if (err) {
-      console.log('Error reading styles directory:', err);
-      return;
-    }
-
-    const writableStream = fs.createWriteStream(outputCss);
-
-    files
-      .filter((file) => file.isFile() && path.extname(file.name) === '.css')
-      .forEach((file) => {
-        const filePath = path.join(stylesDir, file.name);
-        const readableStream = fs.createReadStream(filePath, 'utf-8');
-
-        readableStream.on('data', (styles) => {
-          writableStream.write(styles);
-        });
-      });
-  });
-}
-
-function copyAssets(src, dest) {
-  fs.mkdir(dest, { recursive: true }, () => {
-    fs.readdir(src, { withFileTypes: true }, (err, files) => {
-      if (err) {
-        console.log('Error reading assets directory:', err);
-        return;
-      }
-
-      files.forEach((file) => {
-        const srcPath = path.join(src, file.name);
-        const destPath = path.join(dest, file.name);
-
-        if (file.isDirectory()) {
-          copyAssets(srcPath, destPath);
-        } else if (file.isFile()) {
-          fs.copyFile(srcPath, destPath, (err) => {
-            if (err) console.log(`Error copying file ${file.name}:`, err);
           });
         }
       });
