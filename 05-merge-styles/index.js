@@ -17,31 +17,19 @@ function mergeStyles() {
         (file) => file.isFile() && path.extname(file.name) === '.css',
       );
 
+      //stream to write to the output file
       const writableStream = fs.createWriteStream(outputFile);
 
       cssFiles.forEach((file) => {
         const filePath = path.join(stylesDir, file.name);
 
-        // Read each CSS file and append its content to the bundle
-        const readableStream = fs.createReadStream(filePath, 'utf-8');
-        readableStream.pipe(writableStream, { end: false });
-
-        // Log the progress
-        readableStream.on('end', () => {
-          console.log(`Merged: ${file.name}`);
+        const readableStream = fs.createReadStream(filePath);
+        readableStream.on('data', (styles) => {
+          writableStream.write(styles);
         });
-
-        readableStream.on('error', (err) => {
-          console.error(`Error reading file ${file.name}:`, err);
-        });
-      });
-
-      writableStream.on('finish', () => {
-        console.log(`CSS bundle created: ${outputFile}`);
       });
     });
   });
 }
 
-// Execute the function
 mergeStyles();
