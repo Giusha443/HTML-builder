@@ -31,5 +31,8 @@ function mergeStyles(stylesDir, outputDir, outputFile) {
   });
 }
 
-mergeStyles(stylesDir, outputDir, outputFile); // Call the function
+if (require.main === module) {
+  mergeStyles(stylesDir, outputDir, outputFile); // Call the function
+}
+
 module.exports = mergeStyles; // Export the function

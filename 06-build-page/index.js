@@ -13,53 +13,73 @@ const outputAssets = path.join(projectDist, 'assets');
 const mergeStyles = require('../05-merge-styles/index.js');
 const copyDir = require('../04-copy-directory/index.js');
 
-function buildPage() {
-  fs.mkdir(projectDist, { recursive: true }, () => {
-    buildHtml();
-    mergeStyles(stylesDir, projectDist, outputCss);
-    copyDir(assetsDir, outputAssets);
-  });
+async function buildPage() {
+  try {
+    // Create the project-dist directory
+    await fs.promises.mkdir(projectDist, { recursive: true });
+
+    await buildHtml();
+    await mergeStyles(stylesDir, projectDist, outputCss);
+    await deleteFolderContents(outputAssets);
+    await copyDir(assetsDir, outputAssets);
+
+    console.log('Build completed successfully!');
+  } catch (error) {
+    console.error('Error building the page:', error);
+  }
 }
 
-function buildHtml() {
-  fs.readFile(templateFile, 'utf-8', (err, content) => {
-    if (err) {
-      console.log('Error reading template file:', err);
-      return;
-    }
+async function buildHtml() {
+  try {
+    const templateContent = await fs.promises.readFile(templateFile, 'utf-8');
 
     // Find all template tags in the form {{tag}}
-    const tags = content.match(/{{\s*[\w-]+\s*}}/g);
+    const tags = templateContent.match(/{{\s*[\w-]+\s*}}/g) || [];
 
-    if (!tags) {
-      // Write the template content directly if no tags exist
-      fs.writeFile(outputHtml, content, () => {});
-      return;
-    }
+    let htmlContent = templateContent;
 
-    // Replace each tag with corresponding component content
-    let completedReplacements = 0;
-
-    tags.forEach((tag) => {
+    for (const tag of tags) {
       const componentName = tag.replace(/[{}]/g, '').trim();
       const componentFile = path.join(componentsDir, `${componentName}.html`);
 
-      fs.readFile(componentFile, 'utf-8', (err, componentContent) => {
-        if (!err) {
-          content = content.replace(new RegExp(tag, 'g'), componentContent);
-        }
+      try {
+        const componentContent = await fs.promises.readFile(
+          componentFile,
+          'utf-8',
+        );
+        htmlContent = htmlContent.replace(
+          new RegExp(tag, 'g'),
+          componentContent,
+        );
+      } catch {
+        console.warn(`Component ${componentName} not found, skipping.`);
+      }
+    }
 
-        completedReplacements++;
+    await fs.promises.writeFile(outputHtml, htmlContent);
+    console.log('HTML built successfully!');
+  } catch (error) {
+    console.error('Error building HTML:', error);
+  }
+}
 
-        // After all replacements are complete, write to index.html
-        if (completedReplacements === tags.length) {
-          fs.writeFile(outputHtml, content, (err) => {
-            if (err) console.log('Error writing index.html:', err);
-          });
-        }
-      });
+async function deleteFolderContents(folder) {
+  try {
+    const files = await fs.promises.readdir(folder, { withFileTypes: true });
+
+    const deletions = files.map((file) => {
+      const filePath = path.join(folder, file.name);
+      return file.isDirectory()
+        ? fs.promises.rm(filePath, { recursive: true, force: true })
+        : fs.promises.unlink(filePath);
     });
-  });
+
+    await Promise.all(deletions);
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      console.error(`Error clearing folder ${folder}:`, error);
+    }
+  }
 }
 
 buildPage();

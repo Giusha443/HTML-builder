@@ -5,65 +5,71 @@ const sourceDir = path.join(__dirname, 'files');
 const destDir = path.join(__dirname, 'files-copy');
 
 function deleteFolderContents(folder) {
-  fs.readdir(folder, { withFileTypes: true }, (err, files) => {
-    if (err) {
-      console.error('Error reading folder contents:', err);
-      return;
-    }
-    files.forEach((file) => {
-      const filePath = path.join(folder, file.name);
-      if (file.isDirectory()) {
-        fs.rm(filePath, { recursive: true, force: true }, (err) => {
-          if (err) {
-            console.error(`Error removing directory ${filePath}:`, err);
-          }
-        });
-      } else {
-        fs.unlink(filePath, (err) => {
-          if (err) {
-            console.error(`Error removing file ${filePath}:`, err);
-          }
-        });
+  return new Promise((resolve, reject) => {
+    fs.readdir(folder, { withFileTypes: true }, (err, files) => {
+      if (err) {
+        // If folder doesn't exist, resolve immediately
+        if (err.code === 'ENOENT') return resolve();
+        return reject(`Error reading folder contents: ${err}`);
       }
+
+      const deletions = files.map((file) => {
+        const filePath = path.join(folder, file.name);
+        return new Promise((resolve, reject) => {
+          if (file.isDirectory()) {
+            fs.rm(filePath, { recursive: true, force: true }, (err) => {
+              if (err) reject(`Error removing directory ${filePath}: ${err}`);
+              else resolve();
+            });
+          } else {
+            fs.unlink(filePath, (err) => {
+              if (err) reject(`Error removing file ${filePath}: ${err}`);
+              else resolve();
+            });
+          }
+        });
+      });
+
+      Promise.all(deletions).then(resolve).catch(reject);
     });
   });
 }
 
 function copyDir(source, destination) {
-  fs.mkdir(destination, { recursive: true }, (err) => {
-    if (err) {
-      console.error('Error creating destination directory:', err);
-      return;
-    }
+  return new Promise((resolve, reject) => {
+    fs.mkdir(destination, { recursive: true }, (err) => {
+      if (err) return reject(`Error creating destination directory: ${err}`);
 
-    // Delete contents of the destination directory
-    deleteFolderContents(destination);
+      fs.readdir(source, { withFileTypes: true }, (err, files) => {
+        if (err) return reject(`Error reading source directory: ${err}`);
 
-    // Copy contents from the source directory
-    fs.readdir(source, { withFileTypes: true }, (err, files) => {
-      if (err) {
-        console.error('Error reading source directory:', err);
-        return;
-      }
+        const copies = files.map((file) => {
+          const sourceFile = path.join(source, file.name);
+          const destFile = path.join(destination, file.name);
 
-      files.forEach((file) => {
-        const sourceFile = path.join(source, file.name);
-        const destFile = path.join(destination, file.name);
+          if (file.isDirectory()) {
+            return copyDir(sourceFile, destFile);
+          } else {
+            return new Promise((resolve, reject) => {
+              fs.copyFile(sourceFile, destFile, (err) => {
+                if (err) reject(`Error copying file ${file.name}: ${err}`);
+                else resolve();
+              });
+            });
+          }
+        });
 
-        if (file.isDirectory()) {
-          copyDir(sourceFile, destFile);
-        } else {
-          fs.copyFile(sourceFile, destFile, (err) => {
-            if (err) {
-              console.error(`Error copying file ${file.name}:`, err);
-            }
-          });
-        }
+        Promise.all(copies).then(resolve).catch(reject);
       });
     });
   });
 }
 
-copyDir(sourceDir, destDir);
+if (require.main === module) {
+  deleteFolderContents(destDir)
+    .then(() => copyDir(sourceDir, destDir))
+    .then(() => console.log('Directory copied successfully!'))
+    .catch((err) => console.error(err));
+}
 
 module.exports = copyDir;
